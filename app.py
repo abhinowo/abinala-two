@@ -15,6 +15,11 @@ if 'messages' not in st.session_state:
 if 'pdf_content' not in st.session_state:
     st.session_state.pdf_content = ""
 
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+
+st.set_page_config(page_title="Abhinala", page_icon="📈", layout="wide")
+
 def extract_pdf_text(pdf_file):
     text = ""
     with pdfplumber.open(pdf_file) as pdf:
@@ -22,54 +27,40 @@ def extract_pdf_text(pdf_file):
             text += page.extract_text() + "\n"
     return text
 
-def setup_cuda():
-    """Setup and verify CUDA configuration"""
-    if torch.cuda.is_available():
-        # Set CUDA device
-        torch.cuda.set_device(0)  # Use first GPU
-        # Clear CUDA cache
-        torch.cuda.empty_cache()
-        gc.collect()
+# def setup_cuda():
+#     """Setup and verify CUDA configuration"""
+#     if torch.cuda.is_available():
+#         # Set CUDA device
+#         torch.cuda.set_device(0)  # Use first GPU
+#         # Clear CUDA cache
+#         torch.cuda.empty_cache()
+#         gc.collect()
         
-        # Get device info
-        device_name = torch.cuda.get_device_name(0)
-        memory_allocated = torch.cuda.memory_allocated(0) / 1024**2  # Convert to MB
-        memory_reserved = torch.cuda.memory_reserved(0) / 1024**2    # Convert to MB
+#         # Get device info
+#         device_name = torch.cuda.get_device_name(0)
+#         memory_allocated = torch.cuda.memory_allocated(0) / 1024**2  # Convert to MB
+#         memory_reserved = torch.cuda.memory_reserved(0) / 1024**2    # Convert to MB
         
-        return {
-            "status": True,
-            "device": "cuda",
-            "name": device_name,
-            "memory_allocated": f"{memory_allocated:.2f} MB",
-            "memory_reserved": f"{memory_reserved:.2f} MB"
-        }
-    return {"status": False, "device": "cpu"}
+#         return {
+#             "status": True,
+#             "device": "cuda",
+#             "name": device_name,
+#             "memory_allocated": f"{memory_allocated:.2f} MB",
+#             "memory_reserved": f"{memory_reserved:.2f} MB"
+#         }
+#     return {"status": False, "device": "cpu"}
 
 @st.cache_resource
 def init_model():
     """Initialize model with CUDA optimization if available"""
     try:
         # Setup CUDA configuration
-        cuda_info = setup_cuda()
-        device = cuda_info["device"]
+        # cuda_info = setup_cuda()
+        # device = cuda_info["device"]
         
         # Initialize model with CUDA configuration
-        model = Ollama(
-            model="llama3.2",
-            temperature=0.7,
-            device=device,
-            gpu_layers=43 if device == "cuda" else 0  # Use GPU layers when CUDA is available
-        )
-        
-        # Display CUDA information
-        # if cuda_info["status"]:
-        #     st.sidebar.write("### CUDA Configuration")
-        #     st.sidebar.write(f"🖥️ GPU: {cuda_info['name']}")
-        #     st.sidebar.write(f"💾 Memory Allocated: {cuda_info['memory_allocated']}")
-        #     st.sidebar.write(f"💾 Memory Reserved: {cuda_info['memory_reserved']}")
-        # else:
-        #     st.sidebar.warning("⚠️ Running on CPU - CUDA not available")
-            
+        model = Ollama(model="llama3.2")
+
         return model
     except Exception as e:
         st.error(f"Error initializing model: {str(e)}")
@@ -86,14 +77,16 @@ def process_chat(question, context):
         if torch.cuda.is_available():
             torch.cuda.empty_cache()  # Clear CUDA cache before processing
             
-        prompt = f"""As a financial analysis assistant, please help answer this question 
-        based on the following context. If the information isn't in the context, say so clearly. 
-        And you only need to answer the question briefly with only one language (indonesian or english).
+        prompt = f"""You are a financial analysis assistant. Your task is to help answer questions about the uploaded PDF documents.
+        Please analyze the content and provide accurate information. If you cannot find specific information, say so clearly.
         
-        Context: {context}
+        Context about uploaded files:
+        {context}
         
         Question: {question}
-        """
+        
+        Please provide a brief and clear answer in either Indonesian or English (match the language of the question).
+        If asked about specific financial metrics or data, clearly state where you found the information in the documents."""
 
         response = model.invoke(prompt)
         
@@ -108,15 +101,22 @@ def process_chat(question, context):
 def chat_interface():
     st.sidebar.write("## Abinala Chatbot")
     
+    # Initialize messages and sent flag in session state if not already done
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
+    if 'question_sent' not in st.session_state:
+        st.session_state.question_sent = False
+    
     # Display chat history
     for message in st.session_state.messages:
-        if isinstance(message, HumanMessage):
-            st.chat_message("user").write(message.content)
-        else:
-            st.chat_message("assistant").write(message.content)
-
-    # Chat input
-    if question := st.sidebar.text_area("Masukkan pertanyaan Anda di sini", key="chat_input"):
+        with st.chat_message("user" if isinstance(message, HumanMessage) else "assistant"):
+            st.write(message.content)
+    
+    # Chat input in the sidebar
+    question = st.sidebar.text_area("Masukkan pertanyaan Anda di sini", key="chat_input")
+    
+    # Only process the question if it’s new (not sent before)
+    if question and not st.session_state.question_sent:
         # Add user message to chat history
         st.session_state.messages.append(HumanMessage(content=question))
         
@@ -127,13 +127,17 @@ def chat_interface():
         # Add assistant message to chat history
         st.session_state.messages.append(AIMessage(content=response))
         
-        # Rerun to update chat display
+        # Set the question as sent to avoid re-processing
+        st.session_state.question_sent = True
+        
+        # Rerun to update the display with the new message
         st.rerun()
+    
+    # Reset question_sent when the user types a new question
+    if question != st.session_state.get("last_question", ""):
+        st.session_state.question_sent = False
+        st.session_state.last_question = question
 
-st.set_page_config(page_title="Abhinala", page_icon="📈", layout="wide")
-
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
 
 def main_page():
     chat_interface()
@@ -141,33 +145,10 @@ def main_page():
     # st.sidebar.text_area("Masukkan pertanyaan Anda di sini", height=700, key="chat_input", value="")
     st.sidebar.button("Kirim")
     st.sidebar.write("© Licensed by Otoritas Jasa Keuangan 2024")
-
-    # Add CUDA information section in sidebar
-    st.sidebar.write("### System Information")
-    
-    try:
-        cuda_info = setup_cuda()
-        if torch.cuda.is_available():
-            device_name = torch.cuda.get_device_name(0)
-            memory_allocated = torch.cuda.memory_allocated(0) / 1024**2  # Convert to MB
-            memory_reserved = torch.cuda.memory_reserved(0) / 1024**2    # Convert to MB
-            
-            # Display CUDA information
-            st.sidebar.write("🖥️ **GPU Status:** Active")
-            st.sidebar.write(f"🎯 **Device:** {device_name}")
-            st.sidebar.write(f"💾 **Memory Allocated:** {memory_allocated:.2f} MB")
-            st.sidebar.write(f"💾 **Memory Reserved:** {memory_reserved:.2f} MB")
-        else:
-            st.sidebar.warning("⚠️ Running on CPU - CUDA not available")
-        
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        st.sidebar.write(f"Device: {device.upper()}")
-    except Exception as e:
-        st.error(f"Error initializing model: {str(e)}")
-    return None
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    st.sidebar.write(f"Device: {device.upper()}")
     
     
-
 def extract_data(pdf_file, patterns):
     data = {key: {"Nilai": "Tidak ditemukan", "Status": False, "Halaman": None} for key in patterns}
     with pdfplumber.open(pdf_file) as pdf:
@@ -358,6 +339,9 @@ uploaded_files = {
     "Direktur": st.file_uploader("Pilih file PDF untuk data direktur dan komisaris", type="pdf", key="directors")
 }
 
+# intiliaze for chatbot 
+pdf_files = {}
+# for extracted data
 extracted_data = {}
 
 # Extract and display financial data
@@ -367,7 +351,6 @@ if uploaded_files["Keuangan"]:
     combined_financial_data = {**financial_data, **financial_ratios}
     extracted_data["Keuangan"] = combined_financial_data
     display_extracted_data(combined_financial_data, "Keuangan")
-
     st.session_state.pdf_content += extract_pdf_text(uploaded_files["Keuangan"])
 
 
@@ -376,7 +359,6 @@ if uploaded_files["Keberlanjutan"]:
     sustainable_data = extract_data(uploaded_files["Keberlanjutan"], sustainable_patterns)
     extracted_data["Keberlanjutan"] = sustainable_data
     display_extracted_data(sustainable_data, "Keberlanjutan", unit="ton CO₂e")
-
     st.session_state.pdf_content += extract_pdf_text(uploaded_files["Keberlanjutan"])
 
 
@@ -385,9 +367,8 @@ if uploaded_files["Direktur"]:
     directors_data = extract_directors_data(uploaded_files["Direktur"])
     extracted_data["Direktur"] = directors_data
     display_directors_data(directors_data)
-
     st.session_state.pdf_content += extract_pdf_text(uploaded_files["Direktur"])
-
+        # if im using chatbot, i dont need to extract_pdf_text. i only need the uploaded_files
 
 # Show Generate Report button if any file is uploaded
 if uploaded_files["Keuangan"] or uploaded_files["Keberlanjutan"] or uploaded_files["Direktur"]:
