@@ -10,6 +10,9 @@ Untuk menginstal dan menjalankan aplikasi, ikuti langkah-langkah berikut:
 # Install the required packages
 pip install -r requirements.txt
 
+# Make sure you are on the app directory
+cd abinala-two
+
 # Run the application
 streamlit run app.py
 ```
