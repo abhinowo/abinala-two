@@ -3,7 +3,6 @@ import pdfplumber
 import re
 import pandas as pd
 from langchain_community.llms import Ollama
-from langchain.prompts import ChatPromptTemplate
 from langchain.schema import HumanMessage, AIMessage
 import torch
 
@@ -153,12 +152,11 @@ def extract_data(pdf_file, patterns):
             text = page.extract_text()
             for key, regex in patterns.items():
                 if not data[key]["Status"]:
-                    match = re.search(regex, text, re.IGNORECASE | re.DOTALL)
+                    match = re.search(regex, text, re.IGNORECASE | re.DOTALL) # Case-insensitive search
                     if match:
-                        data[key] = {"Nilai": match.group(1), "Status": True, "Halaman": str(page_num)}
+                        data[key] = {"Nilai": match.group(1), "Status": True, "Halaman": str(page_num)} # Extract the first group if pattern is found
     return data
 
-# Extract lapkeu
 def extract_financial_ratios(pdf_file):
     # ratio dictionary with default values
     ratios = {
@@ -233,6 +231,7 @@ def extract_financial_ratios(pdf_file):
 
     return ratios
 
+# Extract and display directors data
 def extract_directors_data(pdf_file):
     directors = []
     pattern = r"(?<=Name\s)(.*?)(?=\s*Position\s+)(.*?)\s*(?=Tenure Start Date)"
@@ -278,7 +277,7 @@ def extract_directors_data(pdf_file):
 
     return directors
 
-
+# Display extracted data in a table
 def display_extracted_data(data, title, unit=""):
     st.header(f"Hasil Ekstraksi Data {title}")
     summary = [
@@ -296,6 +295,7 @@ def display_directors_data(directors):
     st.header("Hasil Ekstraksi Data Direktur dan Komisaris")
     st.dataframe(pd.DataFrame(directors).style.set_properties(**{'max-height': '400px', 'overflow': 'auto'}), use_container_width=True)
 
+# Display the Generate Report button and missing data
 def display_missing_data(data):
     missing_data = []  
     if isinstance(data, list):
@@ -315,7 +315,7 @@ def display_missing_data(data):
     else:
         st.success("Semua data berhasil ditemukan dan tidak ada masalah dalam laporan.")
 
-# Using regex to match patterns in the text
+# Using regex to match patterns in the text to get Nilai 
 financial_patterns = {
     "Total Ekuitas": r"(?i)\b(?:TOTAL EKUITAS|JUMLAH EKUITAS)\b\s*([\d.,]+)",
     "Total Liabilitas": r"(?i)\b(?:TOTAL LIABILITAS|JUMLAH LIABILITAS)\b\s*([\d.,]+)",
