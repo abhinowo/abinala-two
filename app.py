@@ -6,7 +6,6 @@ from langchain_community.llms import Ollama
 from langchain.prompts import ChatPromptTemplate
 from langchain.schema import HumanMessage, AIMessage
 import torch
-import gc
 
 # Initialize session state for chat history
 if 'messages' not in st.session_state:
@@ -138,11 +137,9 @@ def chat_interface():
         st.session_state.question_sent = False
         st.session_state.last_question = question
 
-
+# Main page content
 def main_page():
     chat_interface()
-    # st.sidebar.write("## Abinala Chatbot")
-    # st.sidebar.text_area("Masukkan pertanyaan Anda di sini", height=700, key="chat_input", value="")
     st.sidebar.button("Kirim")
     st.sidebar.write("© Licensed by Otoritas Jasa Keuangan 2024")
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -161,13 +158,16 @@ def extract_data(pdf_file, patterns):
                         data[key] = {"Nilai": match.group(1), "Status": True, "Halaman": str(page_num)}
     return data
 
+# Extract lapkeu
 def extract_financial_ratios(pdf_file):
+    # ratio dictionary with default values
     ratios = {
         "ROA": {"Nilai": "Tidak ditemukan", "Status": False, "Halaman": None},
         "ROI": {"Nilai": "Tidak ditemukan", "Status": False, "Halaman": None},
         "Debt to Asset Ratio": {"Nilai": "Tidak ditemukan", "Status": False, "Halaman": None}
     }
     
+    # Helper functions for data extraction
     def clean_number(text):
         """Convert string number to float, handling different number formats."""
         return float(text.replace(".", "").replace(",", ""))
@@ -188,7 +188,7 @@ def extract_financial_ratios(pdf_file):
         for page_num, page in enumerate(pdf.pages, start=1):
             text = page.extract_text()
 
-            # Extract ROA
+            # Extract ROA, find patterns ROA first in text if isnt found then use the calculation method 
             if not ratios["ROA"]["Status"]:
                 roa_patterns = [
                     r'laba bersih\s*(?:\([^)]+\))?.*?([\d.,]+).*?total aset\s*(?:\([^)]+\))?.*?([\d.,]+)'               
@@ -205,7 +205,7 @@ def extract_financial_ratios(pdf_file):
                         except ValueError:
                             continue
 
-            # Extract ROI
+            # Extract ROI (sample)
             if not ratios["ROI"]["Status"]:
                 match = re.search(r'LABA BERSIH.*?([\d.,]+).*?TOTAL EKUITAS.*?([\d.,]+)', 
                                 text, re.DOTALL)
@@ -218,7 +218,7 @@ def extract_financial_ratios(pdf_file):
                     except ValueError:
                         continue
 
-            # Extract Debt to Asset Ratio
+            # Extract Debt to Asset Ratio (sample)
             if not ratios["Debt to Asset Ratio"]["Status"]:
                 match = re.search(r'\bTOTAL LIABILITAS\b\s*([\d.,]+).*?\bTOTAL ASET\b\s*([\d.,]+)', 
                                 text, re.IGNORECASE | re.DOTALL)
@@ -315,6 +315,7 @@ def display_missing_data(data):
     else:
         st.success("Semua data berhasil ditemukan dan tidak ada masalah dalam laporan.")
 
+# Using regex to match patterns in the text
 financial_patterns = {
     "Total Ekuitas": r"(?i)\b(?:TOTAL EKUITAS|JUMLAH EKUITAS)\b\s*([\d.,]+)",
     "Total Liabilitas": r"(?i)\b(?:TOTAL LIABILITAS|JUMLAH LIABILITAS)\b\s*([\d.,]+)",
@@ -323,6 +324,7 @@ financial_patterns = {
     "Laba Operasional": r"(?i)LABA OPERASIONAL.*?([\d.,]+)"
 }
 
+# Using regex to match patterns in the text
 sustainable_patterns = {
     "Scope 1": r"SCOPE 1.*?EMISSION\s*(\d[\d\s,]*\.\d+|\d[\d\s,]*)\s*(?!%)",
     "Scope 2": r"SCOPE 2.*?EMISSION\s*(\d[\d\s,]*\.\d+|\d[\d\s,]*)\s*(?!%)",
@@ -333,14 +335,13 @@ sustainable_patterns = {
 st.title("Ekstraksi Data dari Laporan Tahunan dan Laporan Keberlanjutan")
 st.write("Unggah file PDF laporan untuk ekstraksi data.")
 
+# File upload components
 uploaded_files = {
     "Keuangan": st.file_uploader("Pilih file PDF untuk data keuangan", type="pdf", key="financial"),
     "Keberlanjutan": st.file_uploader("Pilih file PDF untuk data keberlanjutan", type="pdf", key="sustainable"),
     "Direktur": st.file_uploader("Pilih file PDF untuk data direktur dan komisaris", type="pdf", key="directors")
 }
 
-# intiliaze for chatbot 
-pdf_files = {}
 # for extracted data
 extracted_data = {}
 
@@ -378,6 +379,6 @@ if uploaded_files["Keuangan"] or uploaded_files["Keberlanjutan"] or uploaded_fil
             display_missing_data(data)
 
 if st.session_state.logged_in:
-    main_page()
+    main_page() ## kalau mau dibuat login page bisa langsung diubah ke login_page() dan tambahkan fungsi login_page() 
 else:
     main_page()
